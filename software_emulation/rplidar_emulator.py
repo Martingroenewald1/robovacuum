@@ -22,11 +22,11 @@ class RPLidar:
 
         self.transform_walls_to_robot_frame(robot_x, robot_y, robot_theta)
 
-        for i in range(40):
+        for i in range(500):
             angle_ray = start_angle + i * self.resolution
             cabin_data.append(self.get_ray_intercept_distance(angle_ray))
 
-        self.current_angle = (start_angle + 28.8) % 360
+        self.current_angle = 0
         
         return start_angle, cabin_data
 
