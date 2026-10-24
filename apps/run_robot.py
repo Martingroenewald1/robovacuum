@@ -71,7 +71,6 @@ def main():
     
     target_x, target_y = 0.0, 0.0
     point_cloud = deque(maxlen=500)
-    predicted_path = [] # Empty for now since mpc.py doesn't return the path coordinates
     
     running = True
     while running:
@@ -85,33 +84,59 @@ def main():
                 target_x, target_y = to_world(mx, my)
 
         # --- FRAME TRANSFORMATION ---
-        # Your MPC assumes the robot is at (0,0) pointing straight ahead (theta=0).
-        # We must convert the global target (mouse click) into the robot's local frame.
         dx = target_x - robot.x
         dy = target_y - robot.y
         
-        # 2D Rotation Matrix to rotate the target into the robot's perspective
         local_target_x = dx * math.cos(-robot.theta) - dy * math.sin(-robot.theta)
         local_target_y = dx * math.sin(-robot.theta) + dy * math.cos(-robot.theta)
-
-        # --- CALL YOUR MPC ---
-        req_v, req_w = mpc.optimizer(local_target_x, local_target_y)
-
-        robot.motors.set_targets(req_v, req_w)
-        robot.update(dt)
 
         # --- LiDAR Extraction ---
         theta_deg = math.degrees(robot.theta)
         start_angle, cabin_data = robot.lidar.get_next_cabin(robot.x, robot.y, theta_deg)
-        
+                
         for i, dist in enumerate(cabin_data):
             if dist < 12.0:
                 ray_angle_deg = start_angle + (i * 0.72)
                 global_angle_rad = robot.theta + math.radians(ray_angle_deg)
-                
+                    
                 hx = robot.x + (dist * math.cos(global_angle_rad))
                 hy = robot.y + (dist * math.sin(global_angle_rad))
                 point_cloud.append((hx, hy))
+
+        # --- Convert LiDAR to Local Frame ---
+        local_lidar = []
+        for hx, hy in point_cloud:
+            # 1. Translate
+            dx_p = hx - robot.x
+            dy_p = hy - robot.y
+            # 2. Rotate
+            lx = dx_p * math.cos(-robot.theta) - dy_p * math.sin(-robot.theta)
+            ly = dx_p * math.sin(-robot.theta) + dy_p * math.cos(-robot.theta)
+            local_lidar.append((lx, ly))
+
+        # Pass the LOCAL points to the MPC
+        mpc.set_lidar_points(local_lidar)
+
+        # --- CALL YOUR MPC ---
+        req_v, req_w = mpc.optimizer(local_target_x, local_target_y)
+
+        # --- GENERATE PREDICTED PATH FOR RENDERING ---
+        # Roll the winning command forward in global coordinates to draw the magenta line
+        predicted_path = []
+        sim_x = robot.x
+        sim_y = robot.y
+        sim_theta = robot.theta
+        
+        for _ in range(mpc.time_horizon):
+            sim_x += req_v * math.cos(sim_theta) * mpc.dt
+            sim_y += req_v * math.sin(sim_theta) * mpc.dt
+            sim_theta += req_w * mpc.dt
+            predicted_path.append((sim_x, sim_y))
+
+        robot.motors.set_targets(req_v, req_w)
+        robot.update(dt)
+
+        
 
         # --- Rendering ---
         screen.fill(BLACK)
@@ -125,6 +150,12 @@ def main():
         
         for hx, hy in point_cloud:
             pygame.draw.circle(screen, CYAN, to_screen(hx, hy), 2)
+
+        # Draw the trajectory!
+        if len(predicted_path) > 0:
+            path_points = [to_screen(robot.x, robot.y)] + [to_screen(px, py) for px, py in predicted_path]
+            if len(path_points) > 1:
+                pygame.draw.lines(screen, MAGENTA, False, path_points, 3)
 
         rob_pos = to_screen(robot.x, robot.y)
         pygame.draw.circle(screen, GREEN, rob_pos, int(0.2 * SCALE))
