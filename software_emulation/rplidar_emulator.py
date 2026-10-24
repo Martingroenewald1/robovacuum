@@ -1,4 +1,4 @@
-from wall import Wall
+from software_emulation.wall import Wall
 import math
 
 class RPLidar:

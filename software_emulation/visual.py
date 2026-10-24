@@ -12,7 +12,8 @@ env_walls = [
     Wall((-5,-5), (5,-5)),
     Wall((5,-5), (5,5)),
     Wall((1,-1), (1,1)),
-    Wall((0,0), (0,1))
+    Wall((0,0), (0,1)),
+    Wall((1,0), (-1,0))
 ]
 lidar = RPLidar(env_walls)
 
