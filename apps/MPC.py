@@ -6,19 +6,19 @@ from scipy.optimize import minimize
 
 class ModelPredictiveController:
 
-    def __init__(self, dt = 0.1, time_horizon = 10):
+    def __init__(self, dt = 0.1, time_horizon = 15):
         self.current_x = 0
         self.current_y = 0
         self.current_heading = 0
         self.diff_drive = DifferentialDriveEmulator()
         self.dt = dt
-        self.Qd = 10
+        self.Qd = 15
         self.Rv = 10
-        self.Rw = 10
-        self.Rh = 10
-        self.Rl = 10
+        self.Rw = 15
+        self.Rh = 20
+        self.Rl = 1
         self.time_horizon = time_horizon
-        self.robot_radius_sq = 0.1
+        self.robot_radius_sq = 0
         
         self.point_cloud = None
 
@@ -55,31 +55,30 @@ class ModelPredictiveController:
             total_cost += self.Rv * (vel**2) + self.Rw*(ang_vel**2)
 
             total_cost += self.Rh * (math.atan2(target_y, target_x) - ghost_heading)**2 
-
-            
-
+        
+        
             if len(pc_array) > 0:
                 dx = self.point_cloud[:, 0] - ghost_x
                 dy = self.point_cloud[:, 1] - ghost_y
 
                 sq_distances = dx**2 + dy**2
-
+                
                 min_sq_distance = numpy.min(sq_distances)
 
                 if min_sq_distance < self.robot_radius_sq:
-                    total_cost += 100000
+                    total_cost += 10000000
                 else:
-                    total_cost += (0.5 / math.sqrt(min_sq_distance))*self.Rl
-
-
+                    total_cost += (1 / (min_sq_distance + 0.001))*self.Rl
 
         return total_cost
+
+    
 
     def optimizer(self, target_x, target_y):
         
         initial_guess = numpy.ones(self.time_horizon * 2) * 0.1
 
-        motor_bounds = [(0.0, 1), (-1.5, 1.5)] * self.time_horizon
+        motor_bounds = [(0, 2), (-2.5, 2.5)] * self.time_horizon
 
         result = minimize(
             fun=self.cost_function,      
@@ -87,9 +86,12 @@ class ModelPredictiveController:
             args=(target_x, target_y),   
             method='SLSQP',              
             bounds=motor_bounds,         
-            options={'maxiter': 10}     
+            options={'maxiter': 600}     
         )
-
+        if not result.success:
+            print("MPC failed to find a safe path! Braking.")
+            return 0.0, 0.0  # Return zero velocity to the motors
+            
         best_sequence = result.x 
 
         best_vel = best_sequence[0]

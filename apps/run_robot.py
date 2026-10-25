@@ -60,17 +60,22 @@ def main():
         Wall((5, -5),  (5, 5)),
         Wall((5, 5),   (-5, 5)), 
         Wall((-5, 5),  (-5, -5)),
-        Wall((-2, -2), (-2, 2)), 
-        Wall((1, 3),   (3, 0))
+
+        Wall((-0.5, -0.5), (-0.5, 3)), 
+        Wall((2.5, 3),   (3, 2.5)),
+
+        Wall((-1, -1), (-1.5, -1.5)), 
+        Wall((2.5, 3),   (3, 2.5))
     ]
 
     robot = Robot(walls, x=0.0, y=-3.0)
     
     # Initialize your imported custom MPC
-    mpc = ModelPredictiveController(dt=0.1, time_horizon=10)
+    mpc = ModelPredictiveController()
     
     target_x, target_y = 0.0, 0.0
     point_cloud = deque(maxlen=500)
+    local_cloud = deque(maxlen=500)
     
     running = True
     while running:
@@ -93,7 +98,17 @@ def main():
         # --- LiDAR Extraction ---
         theta_deg = math.degrees(robot.theta)
         start_angle, cabin_data = robot.lidar.get_next_cabin(robot.x, robot.y, theta_deg)
-                
+
+        for i, dist in enumerate(cabin_data):
+            if dist < 12.0:
+                deg_ray_angle = start_angle + (i * 0.72)
+                lx = dist * math.cos(math.radians(deg_ray_angle))
+                ly = dist * math.sin(math.radians(deg_ray_angle))
+                local_cloud.append((lx, ly))
+                mpc.set_lidar_points(local_cloud)
+
+
+        
         for i, dist in enumerate(cabin_data):
             if dist < 12.0:
                 ray_angle_deg = start_angle + (i * 0.72)
@@ -103,19 +118,7 @@ def main():
                 hy = robot.y + (dist * math.sin(global_angle_rad))
                 point_cloud.append((hx, hy))
 
-        # --- Convert LiDAR to Local Frame ---
-        local_lidar = []
-        for hx, hy in point_cloud:
-            # 1. Translate
-            dx_p = hx - robot.x
-            dy_p = hy - robot.y
-            # 2. Rotate
-            lx = dx_p * math.cos(-robot.theta) - dy_p * math.sin(-robot.theta)
-            ly = dx_p * math.sin(-robot.theta) + dy_p * math.cos(-robot.theta)
-            local_lidar.append((lx, ly))
-
-        # Pass the LOCAL points to the MPC
-        mpc.set_lidar_points(local_lidar)
+        
 
         # --- CALL YOUR MPC ---
         req_v, req_w = mpc.optimizer(local_target_x, local_target_y)

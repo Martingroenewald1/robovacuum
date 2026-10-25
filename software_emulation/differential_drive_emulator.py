@@ -11,7 +11,7 @@ class DifferentialDriveEmulator:
         self.wheel_radius = 0.065
         self.w_motor_R = 0.0
         self.w_motor_L = 0.0
-        self.smoothing_alpha = 0.1
+        self.smoothing_alpha = 1
         self.std_dev_v = 0.01
         self.std_dev_w = 0.01
 
